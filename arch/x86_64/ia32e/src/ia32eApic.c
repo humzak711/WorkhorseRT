@@ -30,6 +30,8 @@
 #include <lib/acpi.h>
 #include <stdWorkhorse.h>
 
+#define DEMO_APIC_FREQ_HZ 1000000000
+
 static 
 volatile 
 uint8_t *apicMmio = NULL;
@@ -385,66 +387,9 @@ void ia32eApicEnable(uint8_t spuriousVector)
     ia32eApicWrite(IA32E_XAPIC_SIVR_OFFSET, sivr, false);
 }
 
-uint32_t ia32eApicCalibrate(uint8_t spuriousVector)
+uint32_t ia32eApicCalibrate(ATTR_UNUSED uint8_t spuriousVector)
 {
-    ia32eGlobal_t *global = NULL;    
-
-    volatile uint32_t *acpiPmMmio = NULL;
-    uint16_t acpiPmPort = 0;
-
-    uint32_t timer = 0;
-
-    uint32_t counterFrequencyHz = 0;
-    uint64_t calibrationTicks = 0;
-    uint64_t startTicks = 0;
-    
-    uint32_t apicCur = 0;
-    uint32_t apicTicksElapsed = 0;
-    uint32_t apicFrequencyHz = 0;
-
-    global = ia32eThisCpuData()->global;
-
-    timer = spuriousVector | (1 << 16) | (IA32E_XAPIC_ONESHOT << 17);
-    ia32eApicWrite(IA32E_XAPIC_DCR_OFFSET, IA32E_XAPIC_DIV_16, false);
-    ia32eApicWrite(IA32E_XAPIC_TIMER_OFFSET, timer, false);
-    ia32eApicWrite(IA32E_XAPIC_INITIAL_COUNT_OFFSET, UINT32_MAX, false);
-
-    if (ia32eHpetIsInitialized()) {
-
-        counterFrequencyHz = ia32eHpetFrequencyHz();
-        calibrationTicks = msToTicks(CONFIG_X86_64_IA32E_APIC_CALIBRATION_TIME_MS, counterFrequencyHz);
-        startTicks = ia32eHpetReadCounter();
-        spinUntil(ia32eHpetReadCounter() - startTicks >= calibrationTicks);
-
-    } else {
-
-        counterFrequencyHz = ACPI_PM_TMR_HZ;
-        calibrationTicks = msToTicks(CONFIG_X86_64_IA32E_APIC_CALIBRATION_TIME_MS, counterFrequencyHz);
-
-        if (global->acpiPm.mmio) {
-
-            acpiPmMmio = (void *)global->acpiPm.acpiPmMmio;
-            startTicks = READ_ONCE(*acpiPmMmio);
-            spinUntil(READ_ONCE(*acpiPmMmio) - startTicks >= calibrationTicks);
-
-        } else {
-            acpiPmPort = (uint16_t)global->acpiPm.acpiPmPort;
-            startTicks = __ia32eInl(acpiPmPort);
-            spinUntil( __ia32eInl(acpiPmPort) - startTicks >= calibrationTicks);
-        }
-    }
-
-    apicCur = ia32eApicRead(IA32E_XAPIC_CUR_COUNT_OFFSET, false) & 0xffffffff;
-    apicTicksElapsed = UINT32_MAX - apicCur;
-
-    apicFrequencyHz = (apicTicksElapsed * counterFrequencyHz) / calibrationTicks;    
-
-    if (apicFrequencyHz == 0) {
-        ia32eEarlyKpanic("failed to calibrate apic, ended up with a frequency of 0 after manual calibration\n");
-        UNREACHABLE();
-    }
-
-    return apicFrequencyHz;
+    return DEMO_APIC_FREQ_HZ;
 }
 
 uint32_t ia32eApicFrequencyHz(uint8_t spuriousVector)

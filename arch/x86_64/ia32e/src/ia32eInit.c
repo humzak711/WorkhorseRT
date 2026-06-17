@@ -38,6 +38,8 @@
 #include <export/kTimerInterface.h>
 #include <export/kCallbackInterface.h>
 
+#define DEMO_NUM_CPUS 2
+
 static 
 kCpuOps_t cpuOps = {
     .kThisCpuIdFn = ia32eThisCpuId,
@@ -339,21 +341,12 @@ void ia32eMadtParser(void)
 {
     ia32eGlobal_t *global = NULL;
 
-    acpiMadt_t *madt = NULL;
-    size_t madtEntriesSize = 0;
-    uint8_t *madtEntry = NULL;
-    uint8_t *madtEnd = NULL;
-    acpiEntryHdr_t *madtEntryHdr = NULL;
-
     uint32_t lapicId = 0;
     uint32_t threadId = 0;
     uint32_t coreId = 0;
     uint32_t pkgId = 0;
 
-    acpiMadtLapic_t *typeLapic = NULL;
-    acpiMadtX2Apic_t *typeX2apic = NULL;
-    acpiMadtIoApic_t *typeIoapic = NULL;
-    acpiMadtLapicAddrOverride_t *typeAddrOverride = NULL;
+    uint32_t i = 0;
 
     ia32ePerCpu_t *cpu = NULL;
     uint32_t numCpus = 0;
@@ -364,16 +357,36 @@ void ia32eMadtParser(void)
 
     global = ia32eGetGlobalPtr();
 
-    madt = (void *)global->acpi.madtPtr;
-    madtEntriesSize = madt->hdr.length - sizeof(acpiMadt_t);
-    madtEntry = (void *)madt->entries;
-    madtEnd = madtEntry + madtEntriesSize;
-
-    global->apic.apicMmioPhys = madt->localInterruptControllerAddress;
-
     ia32eThisTopology(&lapicId, &threadId, &coreId, &pkgId);
+
+    STATIC_ASSERT(DEMO_NUM_CPUS <= CONFIG_KMAX_CPUS);
+
+    for (i = 0; i < DEMO_NUM_CPUS; i++) {
+        cpu = &global->cpuTable[i];
+
+        cpu->thisPtr = cpu;
+        cpu->global = global;
+
+        cpu->cpuId = i;
+        cpu->apicId = i;
+        cpu->acpiUid = i;
+        cpu->cpuFlags.fields.enabled = 1;
+        cpu->cpuFlags.fields.onlineCapable = 1;
+
+        if (i == 0) {
+            cpu->topology.threadId = threadId;
+            cpu->topology.coreId = coreId;
+            cpu->topology.pkgId = pkgId;
+
+            cpu->cpuFlags.fields.online = 1;
+            cpu->cpuFlags.fields.bsp = 1;
+
+            bspIdx = i;
+            bspFound = true;
+        }
+    }
     
-    while (madtEntry < madtEnd) {
+    /*while (madtEntry < madtEnd) {
 
         madtEntryHdr = (void *)madtEntry;
     
@@ -480,9 +493,9 @@ void ia32eMadtParser(void)
     if (!bspFound) {
         ia32eEarlyKpanic("Bad acpi madt, couldn't locate bsp\n");
         UNREACHABLE();
-    }
+    }*/
 
-    global->numCpus = numCpus;
+    global->numCpus = DEMO_NUM_CPUS;
     global->bsp = bspIdx;
 
     global->ioapic.numIoApics = numIoapics;
@@ -672,6 +685,8 @@ void ia32eBspConfig(void)
 
     ia32eCpuInit();
 
+    cpuEnableInterrupts();
+
     if (ia32eHpetIsInitialized())
         ia32eHpetDisableCounter();
         
@@ -707,19 +722,19 @@ void ia32eInterfacesInit(void)
 
 /* Register initcalls */
 
-K_REGISTER_INITCALL(ia32eMask8259, ia32eMask8259,                                           000);
+//K_REGISTER_INITCALL(ia32eMask8259, ia32eMask8259,                                           000);
 K_REGISTER_INITCALL(ia32eUartInit, ia32eUartInit,                                           001);
 K_REGISTER_INITCALL(ia32eEarlyIdtInit, ia32eEarlyIdtInit,                                   002);
 K_REGISTER_INITCALL(ia32eVmaInit, ia32eVmaInit,                                             003);
-K_REGISTER_INITCALL(ia32eMultiboot2Parser, ia32eMultiboot2Parser,                           004);
-K_REGISTER_INITCALL(ia32eRsdtParser, ia32eRsdtParser,                                       005);
+//K_REGISTER_INITCALL(ia32eMultiboot2Parser, ia32eMultiboot2Parser,                           004);
+//K_REGISTER_INITCALL(ia32eRsdtParser, ia32eRsdtParser,                                       005);
 K_REGISTER_INITCALL(ia32eMadtParser, ia32eMadtParser,                                       006);
-K_REGISTER_INITCALL(ia32eHpetParser, ia32eHpetParser,                                       007);
+//K_REGISTER_INITCALL(ia32eHpetParser, ia32eHpetParser,                                       007);
 K_REGISTER_INITCALL(ia32eApicConfig, ia32eApicConfig,                                       008);
-K_REGISTER_INITCALL(ia32eIoapicConfig, ia32eIoapicConfig,                                   009);
+//K_REGISTER_INITCALL(ia32eIoapicConfig, ia32eIoapicConfig,                                   009);
 
 #if CONFIG_X86_64_IA32E_APPLY_MADT_NMI_OVERRIDES
-K_REGISTER_INITCALL(ia32eIoapicConfigMadtNmiOverrides, ia32eIoapicConfigMadtNmiOverrides,   010);
+//K_REGISTER_INITCALL(ia32eIoapicConfigMadtNmiOverrides, ia32eIoapicConfigMadtNmiOverrides,   010);
 #endif
 
 K_REGISTER_INITCALL(ia32eApWakeup, ia32eApWakeup,                                           011);
